@@ -1,0 +1,14 @@
+Following things we would like to keep track of 
+for analytics:-
+
+1. There are constraints set up by the server on various 
+services or components. For example: There could be products 
+that any user can only add to bag up to a certain amount. 
+We would like to keep track of when this happens. As, if this 
+happens for many users then manufacturer may wanna focus 
+on producing more of this product. Essentially we want to 
+perform analytics on demand of all products. 
+
+2. Number of clicks a product gets, 
+3. Number of people that have/had this product in There
+wishlist

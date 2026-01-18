@@ -1,0 +1,17 @@
+Register
+
+This module allows server to add more components #RemoteComponent and build pages dynamically at app
+runt time via json schemas. Json schema components are saved to disk.
+
+
+Following are its use cases:-
+
+1. Home Page Layout: must change based on sale, events or offers without a need 
+to update the app. 
+
+2. Dynamically Build pages: Often it is necessary to 
+to build pages specific to a offer/event/sale. Like a product catalogue 
+specific to an offer.
+
+
+
