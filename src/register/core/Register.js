@@ -87,9 +87,10 @@ class Register {
     });
     
     // Image - Image with source and ANY style from tree
+    // Wraps in View when has children (for overlays like badges)
     this.registerComponent({
       name: 'Image',
-      component: ({ source, style, contentFit, ...props }) => {
+      component: ({ source, style, contentFit, children, ...props }) => {
         // Handle different source formats
         let imageSource = source;
         let imageKey = 'img';
@@ -98,9 +99,6 @@ class Register {
           if (source.startsWith('data:') || source.startsWith('http')) {
             imageSource = { uri: source };
           }
-          // Create unique key based on source to force remount on change
-          // For base64, use length as key (unique per image)
-          // For URLs, use the URL itself
           if (source.startsWith('data:')) {
             imageKey = `b64-${source.length}`;
           } else {
@@ -108,15 +106,27 @@ class Register {
           }
         }
         
-        return (
+        const imageElement = (
           <Image
             key={imageKey}
             source={imageSource}
-            style={style}
+            style={children ? { width: '100%', height: '100%' } : style}
             contentFit={contentFit || 'cover'}
             {...props}
           />
         );
+        
+        // If has children (badges, overlays), wrap in View with position:relative
+        if (children) {
+          return (
+            <View style={[style, { position: 'relative' }]}>
+              {imageElement}
+              {children}
+            </View>
+          );
+        }
+        
+        return imageElement;
       },
       type: 'primitive',
       properties: {}
