@@ -92,13 +92,25 @@ class Register {
       component: ({ source, style, contentFit, ...props }) => {
         // Handle different source formats
         let imageSource = source;
+        let imageKey = 'img';
+        
         if (typeof source === 'string') {
           if (source.startsWith('data:') || source.startsWith('http')) {
             imageSource = { uri: source };
           }
+          // Create unique key based on source to force remount on change
+          // For base64, use length as key (unique per image)
+          // For URLs, use the URL itself
+          if (source.startsWith('data:')) {
+            imageKey = `b64-${source.length}`;
+          } else {
+            imageKey = source.substring(0, 100);
+          }
         }
+        
         return (
           <Image
+            key={imageKey}
             source={imageSource}
             style={style}
             contentFit={contentFit || 'cover'}
