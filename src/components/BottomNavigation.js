@@ -10,7 +10,16 @@ const navItems = [
   { name: 'WishList', icon: 'hearto', route: 'WishList' },
 ];
 
-const BottomNav = ({ cartCount, wishListCount }) => {
+const BottomNav = ({ 
+  cartCount, 
+  wishListCount,
+  backgroundColor = '#fff',
+  activeColor = '#000',
+  inactiveColor = '#666',
+  iconColor,
+  activeIndicatorColor = '#000',
+  borderColor = '#e5e5e5',
+}) => {
   const navigation = useNavigation();
   const route = useRoute();
   const { getCart } = useCart();
@@ -20,8 +29,11 @@ const BottomNav = ({ cartCount, wishListCount }) => {
     return data ? data.length : 0;
   };
 
+  // Use iconColor if provided, otherwise use inactiveColor
+  const defaultIconColor = iconColor || inactiveColor;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor, borderTopColor: borderColor }]}>
       <TouchableOpacity onPress={() => navigation.navigate('Home')}>
         <Image
           style={{ width: 40, height: 40 }}
@@ -43,21 +55,28 @@ const BottomNav = ({ cartCount, wishListCount }) => {
             <AntDesign
               name={item.icon}
               size={22}
-              color={'#595959'}
-              style={[styles.icon, isActive && styles.activeIcon]}
+              color={isActive ? activeColor : defaultIconColor}
+              style={[
+                styles.icon, 
+                isActive && [styles.activeIcon, { borderBottomColor: activeIndicatorColor }]
+              ]}
             />
 
             {item.name === 'Cart' && (
-              <Text style={styles.countBox}>{getCartTotalCount()}</Text>
+              <Text style={[styles.countBox, { backgroundColor: activeIndicatorColor }]}>
+                {getCartTotalCount()}
+              </Text>
             )}
             {item.name === 'WishList' && (
-              <Text style={styles.countBox}>{wishListCount ?? 0}</Text>
+              <Text style={[styles.countBox, { backgroundColor: activeIndicatorColor }]}>
+                {wishListCount ?? 0}
+              </Text>
             )}
           </TouchableOpacity>
         );
       })}
 
-      <Text style={styles.text}>adiClub</Text>
+      <Text style={[styles.text, { color: activeColor }]}>adiClub</Text>
     </View>
   );
 };
@@ -68,8 +87,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingVertical: 15,
     borderTopWidth: 1,
-    borderTopColor: '#f2f2f2',
-    backgroundColor: 'white',
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -82,33 +99,26 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     position: 'relative',
   },
-  activeIcon: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'black',
-  },
   icon: {
     paddingBottom: 10,
     paddingRight: 2,
   },
+  activeIcon: {
+    borderBottomWidth: 1,
+  },
   label: {
     fontSize: 11,
-    color: '#595959',
-  },
-  activeLabel: {
-    color: '#007AFF',
-    fontWeight: '600',
   },
   countBox: {
     position: 'absolute',
     bottom: 10,
     right: 0,
-    backgroundColor: '#4d4d4d',
-    color: 'white',
     fontSize: 12,
     paddingVertical: 1,
     paddingHorizontal: 3,
     alignContent: 'center',
     justifyContent: 'center',
+    color: '#fff',
   },
   text: {
     paddingTop: 10,

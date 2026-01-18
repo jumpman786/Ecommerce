@@ -34,9 +34,34 @@ const Button = ({
   fullWidth = false,
   elevated = false,
   borderColor,
+  fontSize, // Accept fontSize as top-level prop (for AI customization)
+  padding, // Accept padding as top-level prop (for AI customization)
+  radius, // Accept radius for border-radius (e.g., "full", "lg", "md", "sm", "none", or number)
   contentStyle,
   buttonStyle,
+  ...props // Accept any other props for flexibility
 }) => {
+  
+  // Map radius tokens to numeric values
+  const mapRadius = (r) => {
+    if (r === undefined || r === null) return undefined;
+    if (typeof r === 'number') return r;
+    if (typeof r === 'string') {
+      const radiusMap = {
+        'none': 0,
+        'sm': 4,
+        'md': 8,
+        'lg': 12,
+        'xl': 16,
+        '2xl': 24,
+        'full': 9999,
+      };
+      return radiusMap[r.toLowerCase()] || parseInt(r) || undefined;
+    }
+    return undefined;
+  };
+  
+  const borderRadius = mapRadius(radius);
 
   const navigation = useNavigation();
 
@@ -80,6 +105,7 @@ const Button = ({
           },
           width && { width: width },
           height && { height: height },
+          borderRadius !== undefined && { borderRadius: borderRadius },
           disabled && style === 'solid' && { backgroundColor: 'grey' },
           disabled && style === 'outline' && { borderColor: 'grey' },
           buttonStyle,
@@ -100,6 +126,13 @@ const Button = ({
             color: style === 'solid' ? 'white' : (color && color || 'black'),
           },
           disabled && { color: 'grey' },
+          // Merge fontSize and padding from props into contentStyle
+          fontSize && { 
+            fontSize: typeof fontSize === 'string' ? 
+              ({ xs: 10, sm: 12, md: 14, lg: 16, xl: 18, '2xl': 20 }[fontSize.toLowerCase()] || parseInt(fontSize) || 12) :
+              fontSize 
+          },
+          padding && { padding },
           contentStyle,
         ])}>{displayTitle}</Text>
 
@@ -137,14 +170,58 @@ const Button = ({
     </NativeTouchable>
   );
 
+  // Extract positioning styles from props.style (passed from tree)
+  // These include: position, top, left, right, bottom, margin*, transform, etc.
+  const positioningStyle = typeof props.style === 'object' ? props.style : {};
+  
+  // Map alignment values (support "right", "left", "center" as shortcuts)
+  const mapAlignment = (align) => {
+    if (!align) return null;
+    const alignMap = {
+      'right': 'flex-end',
+      'left': 'flex-start', 
+      'center': 'center',
+      'start': 'flex-start',
+      'end': 'flex-end',
+    };
+    return alignMap[align.toLowerCase?.()] || align;
+  };
+  
+  // Check direct props first, then nested style, then default
+  const computedAlignSelf = mapAlignment(props.alignSelf) || 
+                           mapAlignment(props.alignment) ||
+                           mapAlignment(props.position) ||
+                           mapAlignment(positioningStyle.alignSelf) ||
+                           (fullWidth ? 'stretch' : 'flex-start');
+  
+  
   return (
     <View style={StyleSheet.flatten([
       {
-        position: 'relative',
-        alignSelf: fullWidth ? 'stretch' : 'flex-start',
+        position: positioningStyle.position || 'relative',
+        alignSelf: computedAlignSelf,
       },
       width && { width },
       height && { height },
+      // Apply all positioning styles from tree
+      positioningStyle.position === 'absolute' && {
+        top: positioningStyle.top,
+        left: positioningStyle.left,
+        right: positioningStyle.right,
+        bottom: positioningStyle.bottom,
+      },
+      // Apply margins
+      positioningStyle.margin !== undefined && { margin: positioningStyle.margin },
+      positioningStyle.marginTop !== undefined && { marginTop: positioningStyle.marginTop },
+      positioningStyle.marginBottom !== undefined && { marginBottom: positioningStyle.marginBottom },
+      positioningStyle.marginLeft !== undefined && { marginLeft: positioningStyle.marginLeft },
+      positioningStyle.marginRight !== undefined && { marginRight: positioningStyle.marginRight },
+      positioningStyle.marginHorizontal !== undefined && { marginHorizontal: positioningStyle.marginHorizontal },
+      positioningStyle.marginVertical !== undefined && { marginVertical: positioningStyle.marginVertical },
+      // Apply transform
+      positioningStyle.transform && { transform: positioningStyle.transform },
+      // Apply zIndex
+      positioningStyle.zIndex !== undefined && { zIndex: positioningStyle.zIndex },
     ])}>
       {button}
     </View>

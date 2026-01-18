@@ -10,6 +10,7 @@ export { default as PreLoader } from './PreLoader';
 export { default as Product } from './Product';
 export { default as ProductCaraousal } from './ProductCaraousal';
 export { default as ProductList } from './ProductList';
+export { default as ProductSlider } from './ProductSlider';
 export { default as SearchBar } from './SearchBar';
 export {default as MainBanner} from './MainBanner'
 export { default as Timer } from './Timer';

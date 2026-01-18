@@ -2,15 +2,22 @@ import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import Button from './Button';
 
-const Header = ({ label }) => {
+const Header = ({ 
+  label, 
+  backgroundColor = '#fff',
+  textColor = '#000',
+  borderColor = '#e5e5e5',
+  iconColor,
+}) => {
   return (
-    <View style={styles.header}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.header, { backgroundColor, borderBottomColor: borderColor }]}>
+      <Text style={[styles.label, { color: textColor }]}>{label}</Text>
       <Button
         variant='clear'
         type='link'
         href='/profile'
         iconName='user'
+        color={iconColor || textColor}
       />
     </View>
   );
@@ -23,19 +30,16 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 16,
-    paddingVertical:5,
-    backgroundColor: 'white',
+    paddingVertical: 5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 99,
     borderBottomWidth: 1,
-    borderBottomColor: '#f2f2f2',
   },
   label: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: 'black',
     letterSpacing: 1,
     padding: 8,
   }

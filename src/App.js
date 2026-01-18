@@ -1,19 +1,27 @@
 // App.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Navigator from './navigation';
 import RegisterProvider from './register/core/RegisterProvider';
 import useRegister from "./register/hooks/useRegister";
-import Renderer from "./register/core/Renderer";
 import { MainBanner as bannerSchema } from './schemas/MainBanner'
-import {Banner} from './schemas/Banner'
 import { schema as headerShcema } from './schemas/Header';
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
-import { View, Text, ImageBackground } from 'react-native'
-import c from './register/core/constants'
+import { TouchableOpacity, StyleSheet } from 'react-native'
 import { StatusBar } from 'react-native';
 
-// 🎯 ADD THESE IMPORTS
+// Analytics
 import { posthog, initPostHog } from './lib/posthog';
+
+// AI Agent imports
+import AgentPanel from './components/AgentPanel';
+import { useAgentCustomization } from './agent/hooks/useAgentCustomization';
+import { UITreeProvider, useUITree } from './agent/UITreeContext';
+import Icon from './components/Icon';
+
+// Backend API endpoint
+const API_ENDPOINT = __DEV__
+  ? 'http://localhost:8000'
+  : 'https://your-production-api.com';
 
 require('./assets/images/main-banner.jpg');
 require('./assets/images/christmas2.jpg');
@@ -69,20 +77,56 @@ async function init(register) {
 
 function AppInner() {
   const register = useRegister();
+  const { tree: currentUITree, applyPatch } = useUITree();
   const [initialized, setInitialized] = useState(false);
+  const [agentPanelVisible, setAgentPanelVisible] = useState(false);
+
+  // AI Agent customization hook
+  const {
+    todos,
+    isCustomizing,
+    error,
+    statusMessage,
+    customize,
+    cancel,
+  } = useAgentCustomization({
+    apiEndpoint: API_ENDPOINT,
+    onPatch: (patch) => {
+      console.log('📨 RECEIVED PATCH FROM AGENT:', JSON.stringify(patch, null, 2));
+      if (patch) {
+        console.log('📦 Calling applyPatch...');
+        applyPatch(patch);
+        console.log('✅ applyPatch called');
+      }
+    },
+    onThemeChange: (newTheme) => {
+      console.log('Theme changed:', newTheme);
+      posthog.capture('theme_changed', { theme_name: newTheme?.name });
+    },
+    onError: (err) => {
+      console.error('Agent error:', err);
+      posthog.capture('agent_error', { error: err });
+    },
+    onComplete: () => {
+      posthog.capture('agent_customization_complete');
+    },
+  });
+
+  const handleCustomize = useCallback((prompt) => {
+    console.log('Sending UI tree with', Object.keys(currentUITree.elements).length, 'elements');
+    customize(prompt, currentUITree);
+    posthog.capture('agent_customization_started', { prompt });
+  }, [customize, currentUITree]);
 
   useEffect(() => {
     (async () => {
-      // 🎯 INITIALIZE POSTHOG FIRST
       await initPostHog();
-      
       await init(register);
       setInitialized(true);
-      
-      // 🎯 TRACK APP OPENED
       posthog.capture('app_opened');
     })();
   }, [register]);
+
 
   if (!initialized) {
     return <></>;
@@ -91,29 +135,67 @@ function AppInner() {
   return (
     <>
       <StatusBar
-        barStyle="dark-content"    
-        backgroundColor="white"  
+        barStyle="dark-content"
+        backgroundColor="white"
       />
       <PreLoaderComponent />
       <Navigator
         pages={register.getComponentsByType('page')}
         initialRouteName={'Home'}
       />
+
+      {/* AI Agent Floating Button */}
+      <TouchableOpacity
+        style={styles.floatingButton}
+        onPress={() => setAgentPanelVisible(true)}
+        activeOpacity={0.8}
+      >
+        <Icon name="star" size={24} color="#fff" />
+      </TouchableOpacity>
+
+      {/* AI Agent Panel */}
+      <AgentPanel
+        visible={agentPanelVisible}
+        onClose={() => setAgentPanelVisible(false)}
+        onCustomize={handleCustomize}
+        todos={todos}
+        isLoading={isCustomizing}
+        statusMessage={statusMessage}
+        error={error}
+      />
     </>
   );
 }
 
+const styles = StyleSheet.create({
+  floatingButton: {
+    position: 'absolute',
+    bottom: 100,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+});
+
 export function App() {
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{
-        flex: 1,
-        backgroundColor: 'white'
-      }}>
-        <RegisterProvider>
-          <AppInner />
-        </RegisterProvider>
-      </SafeAreaView>
+      <UITreeProvider>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+          <RegisterProvider>
+            <AppInner />
+          </RegisterProvider>
+        </SafeAreaView>
+      </UITreeProvider>
     </SafeAreaProvider>
   );
 }
