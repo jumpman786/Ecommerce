@@ -19,8 +19,7 @@ import { useAgentCustomization } from './agent/hooks/useAgentCustomization';
 import { UITreeProvider, useUITree } from './agent/UITreeContext';
 import Icon from './components/Icon';
 
-// Screenshot capture - simplified placeholder approach
-// SVG foreignObject doesn't work well with complex React Native Web UIs
+// Screenshot capture using html2canvas with dynamic import (Metro-safe)
 const captureScreenshotWeb = async () => {
   if (typeof document === 'undefined') {
     console.warn('📸 No document available');
@@ -28,45 +27,39 @@ const captureScreenshotWeb = async () => {
   }
   
   try {
-    console.log('📸 Generating screenshot placeholder...');
+    console.log('📸 Capturing screenshot with html2canvas...');
     
-    // Create a simple placeholder with page info
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 400;
-    const ctx = canvas.getContext('2d');
+    // Dynamic import to avoid Metro bundling issues
+    const html2canvas = (await import('html2canvas')).default;
     
-    // Background
-    ctx.fillStyle = '#f8f9fa';
-    ctx.fillRect(0, 0, 600, 400);
+    // Get root element
+    const root = document.getElementById('root');
+    if (!root) {
+      console.error('❌ Root element not found');
+      return '';
+    }
     
-    // Border
-    ctx.strokeStyle = '#dee2e6';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(10, 10, 580, 380);
+    // Capture with html2canvas - full viewport
+    const startTime = Date.now();
+    const canvas = await html2canvas(root, {
+      backgroundColor: '#ffffff',
+      scale: 1,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      // Capture full viewport, not cropped
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+    });
     
-    // Title
-    ctx.fillStyle = '#212529';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('E-Commerce App Screenshot', 50, 60);
+    const duration = Date.now() - startTime;
+    console.log(`✅ Screenshot captured in ${duration}ms: ${canvas.width}x${canvas.height}`);
     
-    // Info
-    ctx.font = '16px sans-serif';
-    ctx.fillStyle = '#495057';
-    ctx.fillText('Screenshot captured for AI verification', 50, 100);
-    ctx.fillText(`Viewport: ${window.innerWidth}x${window.innerHeight}`, 50, 130);
-    ctx.fillText(`Time: ${new Date().toLocaleTimeString()}`, 50, 160);
-    
-    // Note about limitations
-    ctx.font = '14px sans-serif';
-    ctx.fillStyle = '#6c757d';
-    ctx.fillText('Note: Full visual capture not available with Metro bundler.', 50, 220);
-    ctx.fillText('Install html2canvas or puppeteer for accurate screenshots.', 50, 245);
-    
+    // Convert to base64
     const dataUrl = canvas.toDataURL('image/png');
-    const base64 = dataUrl.split(',')[1];
-    console.log(`📸 Screenshot placeholder created: ${base64.length} chars`);
-    return base64;
+    console.log(`📸 Base64 size: ${Math.round(dataUrl.length / 1024)}KB`);
+    
+    return dataUrl;
   } catch (err) {
     console.error('📸 Screenshot failed:', err);
     return '';
