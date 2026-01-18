@@ -66,7 +66,7 @@ class StyleProps(BaseModel):
     left: Optional[int] = None
     right: Optional[int] = None
     zIndex: Optional[int] = None
-    
+
     class Config:
         extra = "allow"  # Allow any additional style properties
 

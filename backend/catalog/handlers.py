@@ -45,8 +45,15 @@ class ActionHandlers:
         ctx: ActionContext
     ) -> dict[str, Any]:
         """Modify properties of an existing component."""
-        component_key = params["componentKey"]
-        props = params["props"]
+        component_key = params.get("componentKey")
+        if not component_key:
+            raise ValueError("componentKey is required")
+        
+        props = params.get("props", {})
+        if not props:
+            # Nothing to modify
+            return {"success": True, "componentKey": component_key, "updatedProps": {}}
+        
         replace = params.get("replace", False)
 
         element = ctx.tree.elements.get(component_key)
@@ -286,10 +293,17 @@ class ActionHandlers:
         if not parent:
             raise ValueError(f"Parent component not found: {parent_key}")
 
-        # Validate all children exist
+        # Validate all children exist and remove duplicates
+        seen = set()
+        unique_child_keys = []
         for key in child_keys:
             if key not in ctx.tree.elements:
                 raise ValueError(f"Child component not found: {key}")
+            if key not in seen:
+                seen.add(key)
+                unique_child_keys.append(key)
+        
+        child_keys = unique_child_keys
 
         # Update parent
         ctx.tree.elements[parent_key] = UIElement(
@@ -357,11 +371,13 @@ class ActionHandlers:
             raise ValueError(f"New parent not found: {new_parent_key}")
 
         # Remove from old parent
-        if element.parentKey:
-            old_parent = ctx.tree.elements.get(element.parentKey)
+        old_parent_key = element.parentKey
+        if old_parent_key and old_parent_key != new_parent_key:
+            # Only remove from old parent if moving to a DIFFERENT parent
+            old_parent = ctx.tree.elements.get(old_parent_key)
             if old_parent:
                 new_children = [k for k in old_parent.children if k != component_key]
-                ctx.tree.elements[element.parentKey] = UIElement(
+                ctx.tree.elements[old_parent_key] = UIElement(
                     key=old_parent.key,
                     type=old_parent.type,
                     props=old_parent.props,
@@ -371,10 +387,13 @@ class ActionHandlers:
                     trackEvent=old_parent.trackEvent,
                     visible=old_parent.visible,
                 )
-                ctx.emit_patch("replace", f"/elements/{element.parentKey}/children", new_children)
+                ctx.emit_patch("replace", f"/elements/{old_parent_key}/children", new_children)
 
-        # Add to new parent
-        new_parent_children = list(new_parent.children)
+        # Get fresh reference to new parent (may have been updated above if same as old)
+        new_parent = ctx.tree.elements.get(new_parent_key)
+        
+        # Add to new parent - remove first if already present to avoid duplicates
+        new_parent_children = [k for k in new_parent.children if k != component_key]
         if insert_index is not None:
             new_parent_children.insert(insert_index, component_key)
         else:

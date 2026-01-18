@@ -12,6 +12,7 @@ class CustomizeRequest(BaseModel):
     prompt: str  # User's customization request
     current_tree: UITree  # Current state of the UI
     theme: Optional[dict[str, Any]] = None  # Current theme
+    session_id: Optional[str] = None  # Session ID for conversation persistence
 
 
 class TodoItem(BaseModel):
@@ -35,20 +36,23 @@ class CustomizeEvent(BaseModel):
     Streamed to frontend via SSE.
     """
     type: Literal[
-        "status",      # Status message
-        "plan",        # Initial plan with todos
-        "todo_update", # Todo status change
-        "patch",       # UI tree patch
-        "theme_update",# Theme change
+        "status",           # Status message
+        "plan",             # Initial plan with todos
+        "todo_update",      # Todo status change
+        "patch",            # UI tree patch
+        "theme_update",     # Theme change
+        "screenshot_request", # Request screenshot from frontend
         "validation_warning",  # Validation issue
-        "error",       # Error occurred
-        "complete",    # Customization complete
+        "error",            # Error occurred
+        "complete",         # Customization complete
     ]
     message: Optional[str] = None
     todos: Optional[list[TodoItem]] = None
     patch: Optional[PatchOperation] = None
     theme: Optional[dict[str, Any]] = None
     issues: Optional[list[str]] = None
+    request_id: Optional[str] = None  # For screenshot requests
+    session_id: Optional[str] = None  # Session ID for matching agent
 
 
 class GenerateImageRequest(BaseModel):
@@ -132,3 +136,8 @@ class ScreenshotResponse(BaseModel):
     componentKey: Optional[str] = None
     width: int
     height: int
+
+
+class ScreenshotUpload(BaseModel):
+    """Screenshot upload from frontend to backend."""
+    image_base64: str  # Base64 encoded PNG image

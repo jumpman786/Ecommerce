@@ -121,3 +121,7 @@ class TodoManager:
     def to_dict_list(self) -> list[dict[str, Any]]:
         """Convert todos to list of dicts for serialization."""
         return [t.model_dump() for t in self.todos]
+
+    def clear(self) -> None:
+        """Clear all todos for a new request."""
+        self.todos = []

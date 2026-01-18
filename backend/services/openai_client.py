@@ -1,5 +1,5 @@
 """
-OpenAI o1 client for the AI agent with reasoning capabilities.
+OpenAI GPT-4o client for the AI agent.
 """
 import os
 from typing import Any, AsyncIterator, Optional
@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 
 
 class OpenAIClient:
-    """Async OpenAI client wrapper for o1 reasoning model."""
+    """Async OpenAI client wrapper for GPT-4o."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -15,34 +15,31 @@ class OpenAIClient:
             raise ValueError("OPENAI_API_KEY is required")
 
         self.client = AsyncOpenAI(api_key=self.api_key)
-        self.model = "o1"  # Reasoning model with built-in thinking
+        self.model = "gpt-4o"
 
     async def chat_completion(
         self,
         messages: list[dict[str, Any]],
         tools: Optional[list[dict[str, Any]]] = None,
         tool_choice: Optional[dict[str, Any] | str] = None,
-        reasoning_effort: str = "medium",
+        temperature: float = 0.7,
     ) -> dict[str, Any]:
         """
-        Send a chat completion request to o1.
+        Send a chat completion request to GPT-4o.
 
         Args:
             messages: List of messages in OpenAI format
             tools: Optional list of tool definitions
             tool_choice: Optional tool choice specification
-            reasoning_effort: How much reasoning to use (low, medium, high)
+            temperature: Sampling temperature
 
         Returns:
             The completion response
         """
-        # o1 models use developer message instead of system
-        processed_messages = self._convert_system_to_developer(messages)
-        
         kwargs = {
             "model": self.model,
-            "messages": processed_messages,
-            "reasoning_effort": reasoning_effort,
+            "messages": messages,
+            "temperature": temperature,
         }
 
         if tools:
@@ -57,7 +54,7 @@ class OpenAIClient:
         self,
         messages: list[dict[str, Any]],
         tools: Optional[list[dict[str, Any]]] = None,
-        reasoning_effort: str = "medium",
+        temperature: float = 0.7,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream a chat completion request.
@@ -65,17 +62,15 @@ class OpenAIClient:
         Args:
             messages: List of messages in OpenAI format
             tools: Optional list of tool definitions
-            reasoning_effort: How much reasoning to use
+            temperature: Sampling temperature
 
         Yields:
             Streamed response chunks
         """
-        processed_messages = self._convert_system_to_developer(messages)
-        
         kwargs = {
             "model": self.model,
-            "messages": processed_messages,
-            "reasoning_effort": reasoning_effort,
+            "messages": messages,
+            "temperature": temperature,
             "stream": True,
         }
 
@@ -87,59 +82,59 @@ class OpenAIClient:
         async for chunk in response:
             yield chunk.model_dump()
 
-    def _convert_system_to_developer(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """
-        Convert system messages to developer messages for o1.
-        o1 uses 'developer' role instead of 'system'.
-        """
-        result = []
-        for msg in messages:
-            if msg.get("role") == "system":
-                result.append({"role": "developer", "content": msg["content"]})
-            else:
-                result.append(msg)
-        return result
-
     async def generate_plan(
         self,
         user_prompt: str,
         current_tree: dict[str, Any],
         system_prompt: str,
         tools: list[dict[str, Any]],
+        conversation_history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """
         Generate a plan for the customization request.
-        Uses high reasoning effort for better planning.
 
         Args:
             user_prompt: The user's customization request
             current_tree: Current UI tree state
             system_prompt: System prompt with catalog info
             tools: Available tools
+            conversation_history: Previous messages for context (optional)
 
         Returns:
             The plan (tool call result)
         """
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user",
-                "content": f"""User request: {user_prompt}
+        # Build the new user message
+        new_user_message = {
+            "role": "user",
+            "content": f"""User request: {user_prompt}
 
 Current UI tree structure:
 {self._summarize_tree(current_tree)}
 
 Think carefully about design principles and create a cohesive plan.
-First step should always be to establish a color palette.
 Use the create_plan tool to outline specific steps."""
-            },
-        ]
+        }
+        
+        # Use conversation history if provided, otherwise start fresh
+        if conversation_history and len(conversation_history) > 0:
+            # Include history for context (user said "move it to left" - what is "it"?)
+            messages = [
+                {"role": "system", "content": system_prompt},
+                *conversation_history,  # Previous context
+                new_user_message,
+            ]
+            print(f"📝 Planning with {len(conversation_history)} messages of history")
+        else:
+            messages = [
+                {"role": "system", "content": system_prompt},
+                new_user_message,
+            ]
 
         response = await self.chat_completion(
             messages=messages,
             tools=tools,
             tool_choice={"type": "function", "function": {"name": "create_plan"}},
-            reasoning_effort="high",  # Use high reasoning for planning
+            temperature=0.7,
         )
 
         return response
@@ -186,7 +181,80 @@ Current UI tree:
         response = await self.chat_completion(
             messages=messages,
             tools=tools,
-            reasoning_effort="medium",
+            temperature=0.7,
+        )
+
+        return response
+
+    async def analyze_screenshot(
+        self,
+        base64_image: str,
+        original_prompt: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """
+        Analyze a screenshot using GPT-4o vision to verify UI changes.
+
+        Args:
+            base64_image: Base64 encoded PNG screenshot
+            original_prompt: The original user customization request
+            messages: Conversation history for context
+            tools: Available tools for making fixes
+
+        Returns:
+            The completion response with potential fix actions
+        """
+        # Build vision analysis prompt
+        analysis_prompt = f"""Analyze this screenshot to verify the UI changes match the user's request.
+
+Original request: {original_prompt}
+
+Look for these issues:
+1. Colors that don't match the intended theme or palette
+2. Text that's hard to read (poor contrast)
+3. Layout/alignment problems
+4. Missing elements that should have been added
+5. Elements that look broken or unstyled
+6. Images that failed to load or look wrong
+
+If everything looks good, respond with just: "UI looks correct, no issues found."
+
+If you find issues, call the appropriate tools to fix them:
+- Use modify_component to fix colors, text, or styling
+- Use move_component to fix positioning issues
+
+Be specific about what needs to be fixed."""
+
+        # Create vision message with image
+        vision_message = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": analysis_prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{base64_image}",
+                        "detail": "high"
+                    }
+                }
+            ]
+        }
+
+        # Build full message list: system + history + vision
+        # Filter out any previous vision messages from history
+        filtered_messages = [
+            m for m in messages
+            if not (isinstance(m.get("content"), list) and 
+                   any(c.get("type") == "image_url" for c in m.get("content", [])))
+        ]
+
+        all_messages = filtered_messages + [vision_message]
+
+        response = await self.chat_completion(
+            messages=all_messages,
+            tools=tools,
+            temperature=0.3,  # Lower temperature for more precise analysis
         )
 
         return response

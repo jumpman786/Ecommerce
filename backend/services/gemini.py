@@ -59,7 +59,7 @@ class GeminiImageService:
                 config=types.GenerateContentConfig(
                     response_modalities=['TEXT', 'IMAGE'],
                     image_config=types.ImageConfig(aspect_ratio=aspect),
-                )
+            )
             )
 
             for part in response.parts:
