@@ -304,7 +304,9 @@ class ActionHandlers:
         ctx: ActionContext
     ) -> dict[str, Any]:
         """Remove a component from the tree."""
-        component_key = params["componentKey"]
+        component_key = params.get("componentKey")
+        if not component_key:
+            raise ValueError(f"componentKey is required, got params: {params}")
         remove_children = params.get("removeChildren", True)
 
         element = ctx.tree.elements.get(component_key)
@@ -327,7 +329,7 @@ class ActionHandlers:
         # Remove from parent's children
         if element.parentKey:
             parent = ctx.tree.elements.get(element.parentKey)
-            if parent:
+            if parent and parent.children:
                 new_children = [k for k in parent.children if k != component_key]
                 ctx.tree.elements[element.parentKey] = UIElement(
                     key=parent.key,
@@ -343,8 +345,9 @@ class ActionHandlers:
 
         # Remove elements
         for key in keys_to_remove:
-            del ctx.tree.elements[key]
-            ctx.emit_patch("remove", f"/elements/{key}")
+            if key in ctx.tree.elements:
+                del ctx.tree.elements[key]
+                ctx.emit_patch("remove", f"/elements/{key}")
 
         return {
             "success": True,
