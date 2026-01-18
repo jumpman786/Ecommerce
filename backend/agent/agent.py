@@ -112,9 +112,8 @@ class EcommerceAgent:
             )
 
         # Phase 3: Screenshot verification
-        # Currently disabled - Metro bundler doesn't support proper screenshot capture
-        # Enable when using puppeteer or html2canvas
-        ENABLE_SCREENSHOT_VERIFICATION = False
+        # Enabled - using html2canvas with dynamic import
+        ENABLE_SCREENSHOT_VERIFICATION = True
         
         if ENABLE_SCREENSHOT_VERIFICATION:
             MAX_VERIFY_ITERATIONS = 3
@@ -131,9 +130,12 @@ class EcommerceAgent:
                 
                 try:
                     # Wait for frontend to send screenshot (short timeout)
+                    print(f"⏳ Waiting for screenshot (iteration {iteration + 1})...")
                     await asyncio.wait_for(self.screenshot_event.wait(), timeout=10.0)
                     self.screenshot_event.clear()
+                    print(f"✅ Screenshot received: {len(self.screenshot_data or '')} chars")
                 except asyncio.TimeoutError:
+                    print("⏱️ Screenshot timeout")
                     yield CustomizeEvent(type="status", message="Screenshot timeout, skipping verification")
                     break
                 
@@ -144,6 +146,7 @@ class EcommerceAgent:
                     break
                 
                 # Analyze screenshot with vision
+                print(f"🔍 Calling OpenAI analyze_screenshot...")
                 yield CustomizeEvent(type="status", message=f"Analyzing screenshot (iteration {iteration + 1})...")
                 
                 try:
@@ -162,6 +165,10 @@ class EcommerceAgent:
                     tool_calls = message.get("tool_calls") or []
                     content = message.get("content", "")
                     
+                    print(f"📊 Analysis result: {len(tool_calls)} fixes needed")
+                    # Show full analysis for debugging
+                    print(f"📝 Analysis content:\n{content}" if content else "📝 No content")
+                    
                     # Add analysis to conversation history
                     self.messages.append({
                         "role": "user",
@@ -178,10 +185,12 @@ class EcommerceAgent:
                     
                     if not tool_calls:
                         # No fixes needed
+                        print("✅ UI verification passed - no fixes needed")
                         yield CustomizeEvent(type="status", message="UI verified successfully!")
                         break
                     
                     # Process fix actions
+                    print(f"🔧 Applying {len(tool_calls)} fixes from screenshot analysis...")
                     yield CustomizeEvent(type="status", message=f"Applying {len(tool_calls)} fixes...")
                     async for event in self._process_tool_calls(analysis_result):
                         yield event

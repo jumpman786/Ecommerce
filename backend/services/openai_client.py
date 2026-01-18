@@ -138,7 +138,7 @@ Use the create_plan tool to outline specific steps."""
             messages=messages,
             tools=tools,
             tool_choice={"type": "function", "function": {"name": "create_plan"}},
-            temperature=0.7,
+            temperature=0.3,  # Low for deterministic plans
         )
 
         return response
@@ -185,7 +185,7 @@ Current UI tree:
         response = await self.chat_completion(
             messages=messages,
             tools=tools,
-            temperature=0.7,
+            temperature=0.2,  # Low for deterministic step execution
         )
 
         return response
@@ -209,28 +209,81 @@ Current UI tree:
         Returns:
             The completion response with potential fix actions
         """
-        # Build vision analysis prompt
-        analysis_prompt = f"""Analyze this screenshot to verify the UI changes match the user's request.
+        # Build vision analysis prompt - be critical like a professional UI/UX designer
+        analysis_prompt = f"""You are a senior UI/UX designer reviewing this e-commerce app screenshot.
+Be CRITICAL and look for refinements. Your job is to POLISH the design AND ensure it matches the user's intent.
 
-Original request: {original_prompt}
+## ORIGINAL USER REQUEST:
+"{original_prompt}"
 
-Look for these issues:
-1. Colors that don't match the intended theme or palette
-2. Text that's hard to read (poor contrast)
-3. Layout/alignment problems
-4. Missing elements that should have been added
-5. Elements that look broken or unstyled
-6. Images that failed to load or look wrong
+## STEP 1: ALIGNMENT CHECK (Most Important!)
+First, verify the UI ACTUALLY delivers what the user asked for:
+- If user asked for "Christmas theme" → Is there Christmas imagery, red/green/gold colors, festive elements?
+- If user asked to "move button right" → Is the button actually on the right?
+- If user asked for "dark mode" → Is the background dark with light text?
+- Does the overall result MATCH the user's intent?
 
-If everything looks good, respond with just: "UI looks correct, no issues found."
+If the result does NOT match the user's request, call tools to FIX it immediately.
 
-If you find issues, call the appropriate tools to fix them:
-- Use modify_component to fix colors, text, or styling
-- Use move_component to fix positioning issues
+## STEP 2: DESIGN QUALITY CHECK
+Then evaluate these design aspects:
 
-Be specific about what needs to be fixed."""
+1. **Text Readability**
+   - Is ALL text clearly readable? Check contrast against backgrounds
+   - Are there any text overlaps or conflicts? (e.g., two headlines fighting for attention)
+   - Old default text showing through new themed content?
+
+2. **Visual Harmony**
+   - Does the color palette feel cohesive? (60-30-10 rule)
+   - Are there any jarring color clashes?
+   - Does the theme apply CONSISTENTLY across all sections?
+
+3. **Layout & Spacing**
+   - Is spacing consistent?
+   - Are elements properly aligned?
+   - Any overlapping elements that shouldn't overlap?
+
+4. **Professional Polish**
+   - Would this look good in a professional e-commerce store?
+   - Any rough edges, misaligned text, or broken layouts?
+
+## STEP 3: CHECK FOR UNWANTED CHANGES
+The agent may have made EXTRA changes that the user didn't ask for. Check for:
+- Color changes when user only asked to move something
+- Font changes when user only asked to change color
+- Any modifications that go BEYOND what was requested
+
+If you see unwanted changes, call tools to REVERT them to the original state.
+
+## DECISION MAKING:
+1. If user's request is NOT fulfilled → Call tools to fix it
+2. If the agent made EXTRA unwanted changes → Call tools to revert them
+3. If there are design issues → Call tools to fix them  
+4. Only say "UI looks correct, no issues found" if:
+   - The user's request is FULLY satisfied
+   - AND no extra unwanted changes were made
+   - AND the design is polished with no issues
+
+## BE STRICT - Common issues to catch:
+- "Aligned right" means the element should be at the RIGHT EDGE of its container, not floating in the middle
+- Buttons floating in weird positions are WRONG
+- Text that looks cramped or overlapping is WRONG
+- If something looks "off" or "weird", it IS wrong - trust your instincts
+- Professional e-commerce sites have CLEAN layouts - if it looks amateur, FIX IT
+
+## IMPORTANT: 
+You are the LAST line of defense. If you pass something that looks bad, it goes to production.
+Be HARSH. Find issues. Make it PERFECT.
+
+For each issue, call modify_component with specific fixes."""
 
         # Create vision message with image
+        # Handle both raw base64 and full data URL formats
+        if base64_image.startswith('data:'):
+            image_url = base64_image
+        else:
+            image_url = f"data:image/png;base64,{base64_image}"
+        
         vision_message = {
             "role": "user",
             "content": [
@@ -238,7 +291,7 @@ Be specific about what needs to be fixed."""
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": f"data:image/png;base64,{base64_image}",
+                        "url": image_url,
                         "detail": "high"
                     }
                 }

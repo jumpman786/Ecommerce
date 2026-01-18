@@ -65,7 +65,15 @@ class ActionHandlers:
         if replace:
             new_props = props
         else:
-            new_props = {**element.props, **props}
+            # Deep merge for nested objects like style and textStyle
+            new_props = {**element.props}
+            for key, value in props.items():
+                if key in ("style", "textStyle", "contentContainerStyle") and isinstance(value, dict):
+                    # Deep merge: preserve existing style props and update with new ones
+                    existing_style = new_props.get(key, {}) or {}
+                    new_props[key] = {**existing_style, **value}
+                else:
+                    new_props[key] = value
 
         # Update the tree
         ctx.tree.elements[component_key] = UIElement(

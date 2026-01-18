@@ -166,8 +166,14 @@ async def receive_screenshot(session_id: str, request: ScreenshotUpload):
         filename = f"{timestamp}_{session_id[:8]}.png"
         filepath = SCREENSHOTS_DIR / filename
         
+        # Strip data URL prefix if present
+        image_b64 = request.image_base64
+        if image_b64.startswith('data:'):
+            # Extract base64 part after the comma
+            image_b64 = image_b64.split(',', 1)[1]
+        
         # Decode and save
-        image_data = base64.b64decode(request.image_base64)
+        image_data = base64.b64decode(image_b64)
         filepath.write_bytes(image_data)
         print(f"📸 Screenshot saved: {filepath}")
     except Exception as e:

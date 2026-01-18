@@ -35,7 +35,7 @@ class GenerateImageParams(BaseModel):
     width: int = Field(1200)
     height: int = Field(400)
     targetComponent: str = Field(..., description="Component key to apply image to")
-    targetProp: str = Field("imageUrl", description="Prop name to set (default: imageUrl)")
+    targetProp: str = Field("source", description="Prop name to set (default: source for ImageBackground/Image)")
 
 
 class EditImageParams(BaseModel):
@@ -228,8 +228,8 @@ ACTION_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "targetProp": {
                     "type": "string",
-                    "description": "Which prop to set (default: 'imageUrl' for banners, 'source' for images)",
-                    "default": "imageUrl",
+                    "description": "Which prop to set (default: 'source' for ImageBackground and Image components)",
+                    "default": "source",
                 },
             },
             "required": ["prompt", "targetComponent"],

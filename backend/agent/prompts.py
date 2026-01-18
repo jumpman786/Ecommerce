@@ -126,6 +126,36 @@ All components accept a `style` object with React Native styles:
 }
 ```
 
+### POSITIONING - CRITICAL!
+
+To move an element LEFT/RIGHT/CENTER within its parent, use `alignSelf`:
+
+```json
+// Align element to LEFT (default)
+{"style": {"alignSelf": "flex-start"}}
+
+// Align element to CENTER
+{"style": {"alignSelf": "center"}}
+
+// Align element to RIGHT
+{"style": {"alignSelf": "flex-end"}}
+```
+
+**WRONG**: Changing children array order does NOT change visual position!
+**CORRECT**: Use `alignSelf` on the element, or `alignItems`/`justifyContent` on the parent.
+
+Example - Move button to right:
+```json
+// WRONG - this just changes render order, not position
+move_component(componentKey="hero-cta", newParentKey="hero", insertIndex=2)
+
+// CORRECT - this visually moves to right
+modify_component(componentKey="hero-cta", props={"style": {"alignSelf": "flex-end"}})
+
+// ALSO CORRECT - modify parent to push children right
+modify_component(componentKey="hero-content", props={"style": {"alignItems": "flex-end"}})
+```
+
 """
 
 DESIGN_PRINCIPLES = """
@@ -203,6 +233,34 @@ def get_system_prompt(catalog_prompt: str) -> str:
     """Get the full system prompt for the atomic agent."""
     return f"""You are an AI agent that customizes a React Native e-commerce app using an ATOMIC COMPONENT SYSTEM.
 Every element is a primitive with inline styles. You have full control over everything.
+
+## CRITICAL RULE: ONLY MAKE REQUESTED CHANGES
+
+When a user asks for a specific change, do ONLY that change. Do NOT add extra "improvements":
+
+❌ WRONG: User asks "move button right" → you move it AND change its color to black
+✅ CORRECT: User asks "move button right" → you ONLY change alignSelf to flex-end
+
+❌ WRONG: User asks "make text bigger" → you change fontSize AND fontWeight AND color
+✅ CORRECT: User asks "make text bigger" → you ONLY change fontSize
+
+Do not add styling changes unless explicitly requested. The user knows what they want.
+
+## STEP-BY-STEP PROMPTS
+
+When user provides numbered steps like "STEP 1", "STEP 2", etc., execute them EXACTLY:
+- Follow the exact order given
+- Use the exact values specified (colors, text, sizes)
+- Do not add, skip, or modify any step
+- If a step says "Set X to Y", use modify_component with exactly that value
+
+Example step: "Set hero-title color to #FFD700"
+→ modify_component(componentKey="hero-title", props={{"style": {{"color": "#FFD700"}}}})
+
+Example step: "Generate festive banner image: [description]"  
+→ generate_image(prompt="[description]", targetComponent="hero-image", ...)
+
+This ensures deterministic, reproducible results for demos.
 
 {ATOMIC_PRINCIPLES}
 
