@@ -143,12 +143,14 @@ export function TreeRenderer({ elementKey, fallback = null }: TreeRendererProps)
 
 /**
  * Renders the entire tree starting from a root element
+ * Uses renderVersion to force re-render when any part of tree changes
  */
 export function TreeRoot({ rootKey }: { rootKey?: string }): React.ReactElement | null {
-  const { tree } = useUITree();
+  const { tree, renderVersion } = useUITree();
   const key = rootKey || tree.root;
   
-  return <TreeRenderer elementKey={key} />;
+  // Include renderVersion in key to force full tree re-render on any update
+  return <TreeRenderer key={`root-${key}-v${renderVersion}`} elementKey={key} />;
 }
 
 export default TreeRenderer;

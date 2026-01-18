@@ -50,8 +50,8 @@ class Register {
 
   async registerRemoteComponent({ name, schema, type, properties }) {
     this.components[name] = {
-      component: () => <Renderer model={schema} />,
-      type,
+      component: () => <Renderer model={schema} />, 
+      type, 
       properties
     };
   }
@@ -85,7 +85,7 @@ class Register {
       type: 'primitive',
       properties: {}
     });
-
+    
     // Image - Image with source and ANY style from tree
     this.registerComponent({
       name: 'Image',
@@ -111,18 +111,40 @@ class Register {
     });
 
     // ScrollView - Scrollable container
+    // Automatically moves layout styles to contentContainerStyle (RN requirement)
     this.registerComponent({
       name: 'ScrollView',
-      component: ({ style, contentContainerStyle, children, ...props }) => (
-        <ScrollView
-          style={style}
-          contentContainerStyle={contentContainerStyle}
-          showsVerticalScrollIndicator={false}
-          {...props}
-        >
-          {children}
-        </ScrollView>
-      ),
+      component: ({ style, contentContainerStyle, children, ...props }) => {
+        // Layout styles that must be in contentContainerStyle, not style
+        const layoutKeys = ['alignItems', 'justifyContent', 'flexDirection', 'flexWrap', 'alignContent', 'gap', 'rowGap', 'columnGap'];
+        
+        // Extract layout styles from style and merge into contentContainerStyle
+        const finalStyle = { ...style };
+        const extractedLayout = {};
+        
+        for (const key of layoutKeys) {
+          if (finalStyle && finalStyle[key] !== undefined) {
+            extractedLayout[key] = finalStyle[key];
+            delete finalStyle[key];
+          }
+        }
+        
+        const finalContentContainerStyle = {
+          ...extractedLayout,
+          ...contentContainerStyle,
+        };
+        
+        return (
+          <ScrollView
+            style={finalStyle}
+            contentContainerStyle={finalContentContainerStyle}
+            showsVerticalScrollIndicator={false}
+            {...props}
+          >
+            {children}
+          </ScrollView>
+        );
+      },
       type: 'primitive',
       properties: {}
     });
@@ -281,7 +303,7 @@ class Register {
     });
 
     // Badge - Small label/tag
-    this.registerComponent({
+      this.registerComponent({
       name: 'Badge',
       component: ({ text, style, textStyle, children }) => (
         <View style={[
@@ -299,8 +321,8 @@ class Register {
         </View>
       ),
       type: 'primitive',
-      properties: {}
-    });
+        properties: {}
+      });
 
     // ========================================
     // INTERNAL COMPONENTS
@@ -353,7 +375,7 @@ class Register {
       .filter(([_, { type }]) => type === _type)
       .map(([name, { component, properties }]) => ({ name, component, properties }));
   }
-
+  
   getComponentsByProperty(name, value) {
     return Object.entries(this.components)
       .filter(([_, { properties }]) => properties && properties[name] === value)

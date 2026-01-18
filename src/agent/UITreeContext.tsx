@@ -33,7 +33,6 @@ export function UITreeProvider({ children }: UITreeProviderProps) {
   const [renderVersion, setRenderVersion] = useState(0);
 
   const setTree = useCallback((newTree: UITree) => {
-    console.log('🌳 UI Tree updated, elements:', Object.keys(newTree.elements).length);
     setTreeState(newTree);
   }, []);
 
@@ -46,7 +45,6 @@ export function UITreeProvider({ children }: UITreeProviderProps) {
       const element = prev.elements[key];
       if (!element) return prev;
       
-      console.log('🔄 Updating element:', key, 'with props:', props);
       
       return {
         ...prev,
@@ -62,7 +60,8 @@ export function UITreeProvider({ children }: UITreeProviderProps) {
   }, []);
 
   const applyPatch = useCallback((patch: { op: string; path: string; value?: any }) => {
-    console.log('📦 Applying patch:', patch);
+    // Minimal logging - just op and path
+    console.log(`📦 Patch: ${patch.op} ${patch.path}`);
     
     // Parse path like "/elements/main-banner/props"
     const pathParts = patch.path.split('/').filter(Boolean);
@@ -85,7 +84,6 @@ export function UITreeProvider({ children }: UITreeProviderProps) {
           
           if (property === 'props') {
             // Deep merge props - especially important for style objects
-            console.log('🔄 Replacing props for:', elementKey, 'with:', patch.value);
             const currentElement = newElements[elementKey];
             const currentProps = currentElement.props || {};
             const newProps = patch.value || {};
@@ -114,17 +112,22 @@ export function UITreeProvider({ children }: UITreeProviderProps) {
               ...currentElement,
               props: mergedProps
             };
-            console.log('✅ Updated element:', newElements[elementKey]);
           } else if (property === 'children') {
             // Update children array (for reorder/move)
-            console.log('🔄 Updating children for:', elementKey, 'to:', patch.value);
+            // Deduplicate to prevent React key errors
+            const rawChildren = patch.value || [];
+            const seen = new Set<string>();
+            const uniqueChildren = rawChildren.filter((key: string) => {
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            });
             newElements[elementKey] = { 
               ...newElements[elementKey], 
-              children: patch.value 
+              children: uniqueChildren 
             };
           } else if (property === 'parentKey') {
             // Update parent reference
-            console.log('🔄 Updating parentKey for:', elementKey, 'to:', patch.value);
             newElements[elementKey] = { 
               ...newElements[elementKey], 
               parentKey: patch.value 
@@ -134,44 +137,10 @@ export function UITreeProvider({ children }: UITreeProviderProps) {
           
         case 'add':
           // Add new element (path is /elements/{key}, value is full element)
+          // NOTE: Backend sends a separate 'replace children' patch, so we DON'T 
+          // auto-add to parent here - that would cause duplicates
           console.log('➕ Adding new element:', elementKey);
-          const newElement = patch.value;
-          newElements[elementKey] = newElement;
-          
-          // If element has a parentKey, add it to parent's children array
-          if (newElement.parentKey) {
-            const parentKey = newElement.parentKey;
-            const parent = newElements[parentKey];
-            if (parent) {
-              const parentChildren = parent.children || [];
-              // Only add if not already in children
-              if (!parentChildren.includes(elementKey)) {
-                console.log(`🔗 Adding ${elementKey} to parent ${parentKey}'s children`);
-                newElements[parentKey] = {
-                  ...parent,
-                  children: [...parentChildren, elementKey]
-                };
-              }
-            } else {
-              console.warn(`⚠️ Parent ${parentKey} not found for new element ${elementKey}`);
-            }
-          } else {
-            // If no parentKey, try to infer parent from element key/type
-            // For example, if it's a subtitle and main-banner exists, add it there
-            if (elementKey.includes('subtitle') || elementKey.includes('title')) {
-              const mainBanner = newElements['main-banner'];
-              if (mainBanner) {
-                console.log(`🔗 Auto-adding ${elementKey} to main-banner (inferred parent)`);
-                const bannerChildren = mainBanner.children || [];
-                if (!bannerChildren.includes(elementKey)) {
-                  newElements['main-banner'] = {
-                    ...mainBanner,
-                    children: [...bannerChildren, elementKey]
-                  };
-                }
-              }
-            }
-          }
+          newElements[elementKey] = patch.value;
           break;
           
         case 'remove':

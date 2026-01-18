@@ -29,6 +29,7 @@
     "expo-localization": "~16.1.6",
     "expo-splash-screen": "~0.30.7",
     "expo-system-ui": "~5.0.6",
+    "html-to-image": "^1.11.13",
     "lottie-react": "^2.4.1",
     "lottie-react-native": "7.2.2",
     "posthog-react-native": "^4.19.0",
@@ -39,9 +40,9 @@
     "react-native-gesture-handler": "~2.24.0",
     "react-native-safe-area-context": "5.3.0",
     "react-native-screens": "~4.10.0",
+    "react-native-view-shot": "^4.0.0",
     "react-native-web": "^0.20.0",
-    "zod": "^3.23.8",
-    "react-native-view-shot": "^4.0.0"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",

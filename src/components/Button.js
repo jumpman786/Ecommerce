@@ -194,7 +194,7 @@ const Button = ({
                            mapAlignment(positioningStyle.alignSelf) ||
                            (fullWidth ? 'stretch' : 'flex-start');
   
-  
+
   return (
     <View style={StyleSheet.flatten([
       {

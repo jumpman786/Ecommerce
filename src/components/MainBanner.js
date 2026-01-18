@@ -208,33 +208,33 @@ const MainBanner = ({
       
       {/* Fallback: Default button if no children (backward compatibility) */}
       {!children && (
-        <View style={{
-          alignSelf: "flex-start",
-          paddingBottom: 20
-        }}>
-          <Button
-            iconAlign="left"
-            type='link'
-            href='Shop'
-            style="clear"
-            iconName="arrow-forward"
+      <View style={{
+        alignSelf: "flex-start",
+        paddingBottom: 20
+      }}>
+        <Button
+          iconAlign="left"
+          type='link'
+          href='Shop'
+          style="clear"
+          iconName="arrow-forward"
             color={effectiveTextColor}
             title={ctaText}
-            buttonStyle={{ backgroundColor: 'white' }}
-            contentStyle={{
+          buttonStyle={{ backgroundColor: 'white' }}
+          contentStyle={{
               fontSize: props.fontSize ? (typeof props.fontSize === 'string' ? 
                 ({ xs: 10, sm: 12, md: 14, lg: 16, xl: 18, '2xl': 20 }[props.fontSize.toLowerCase()] || 12) : 
                 props.fontSize) : 12,
               padding: props.padding || props.buttonPadding || 12,
-              fontWeight: 'bold',
+            fontWeight: 'bold',
               color: effectiveTextColor,
-              letterSpacing: 1.5,
-            }}
-            elevated
-            borderColor='white'
+            letterSpacing: 1.5,
+          }}
+          elevated
+          borderColor='white'
             height={props.buttonHeight || props.height || 40}
-          />
-        </View>
+        />
+      </View>
       )}
     </ImageBackground>
   );

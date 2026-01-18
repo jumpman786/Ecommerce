@@ -32,6 +32,7 @@ export interface CustomizeEvent {
     | 'todo_update'
     | 'patch'
     | 'theme_update'
+    | 'screenshot_request'
     | 'validation_warning'
     | 'error'
     | 'complete';
@@ -40,15 +41,19 @@ export interface CustomizeEvent {
   patch?: PatchOperation;
   theme?: Theme;
   issues?: string[];
+  request_id?: string;  // For screenshot requests
+  session_id?: string;  // Session ID for matching agent
 }
 
 export interface UseAgentCustomizationOptions {
   apiEndpoint: string;
+  sessionId?: string;  // Session ID for conversation persistence
   onTreeChange?: (tree: UITree) => void;
   onThemeChange?: (theme: Theme) => void;
   onPatch?: (patch: PatchOperation) => void;
   onError?: (error: string) => void;
   onComplete?: () => void;
+  onScreenshotRequest?: () => Promise<string>;  // Returns base64 PNG
 }
 
 export interface UseAgentCustomizationResult {
@@ -68,11 +73,13 @@ export function useAgentCustomization(
 ): UseAgentCustomizationResult {
   const {
     apiEndpoint,
+    sessionId,
     onTreeChange,
     onThemeChange,
     onPatch,
     onError,
     onComplete,
+    onScreenshotRequest,
   } = options;
 
   const [todos, setTodos] = useState<TodoItem[]>([]);
@@ -100,6 +107,7 @@ export function useAgentCustomization(
 
       case 'patch':
         if (event.patch) {
+          console.log('🔧 Applying patch:', event.patch.op, event.patch.path);
           onPatch?.(event.patch);
         }
         break;
@@ -107,6 +115,40 @@ export function useAgentCustomization(
       case 'theme_update':
         if (event.theme) {
           onThemeChange?.(event.theme);
+        }
+        break;
+
+      case 'screenshot_request':
+        console.log('📸 Screenshot requested, session:', event.session_id);
+        // Handle asynchronously - don't block event processing
+        if (onScreenshotRequest && event.session_id) {
+          const sessionId = event.session_id;
+          (async () => {
+            try {
+              console.log('📸 Capturing screenshot...');
+              const screenshot = await onScreenshotRequest();
+              
+              // Only send if we got a real screenshot (>100 chars)
+              if (!screenshot || screenshot.length < 100) {
+                console.log('📸 Screenshot unavailable, letting backend timeout gracefully');
+                return;
+              }
+              
+              console.log('📸 Screenshot captured, length:', screenshot.length);
+              
+              // Send screenshot back to backend
+              const response = await fetch(`${apiEndpoint}/api/screenshot/${sessionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_base64: screenshot }),
+              });
+              console.log('📸 Screenshot sent, response:', response.status);
+            } catch (e) {
+              console.error('Failed to capture/send screenshot:', e);
+            }
+          })();
+        } else {
+          console.log('📸 No screenshot handler, skipping');
         }
         break;
 
@@ -154,6 +196,7 @@ export function useAgentCustomization(
             prompt,
             current_tree: currentTree,
             theme: currentTheme,
+            session_id: sessionId,
           }),
           signal: abortControllerRef.current.signal,
         });
@@ -209,7 +252,7 @@ export function useAgentCustomization(
         abortControllerRef.current = null;
       }
     },
-    [apiEndpoint, onError]
+    [apiEndpoint, sessionId, onError]
   );
 
   const cancel = useCallback(() => {
