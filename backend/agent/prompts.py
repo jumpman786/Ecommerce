@@ -325,7 +325,7 @@ The UI tree is a flat map of elements with parent-child relationships:
 }}}}
 ```
 
-### Generate image:
+### Generate image (new image from scratch):
 ```json
 {{"name": "generate_image", "params": {{
   "prompt": "Black Friday sale banner, dark elegant background with red accents, gift boxes",
@@ -333,6 +333,19 @@ The UI tree is a flat map of elements with parent-child relationships:
   "targetProp": "source"
 }}}}
 ```
+
+### Edit existing image:
+Use `edit_image` when the user wants to MODIFY an existing image (change face, add item, edit background):
+```json
+{{"name": "edit_image", "params": {{
+  "componentKey": "product-4-image",
+  "prompt": "change the face to a smiling woman with blonde hair"
+}}}}
+```
+
+**When to use edit_image vs generate_image:**
+- **edit_image**: "change the face", "add sunglasses", "make background white", "edit the person's shirt"
+- **generate_image**: "create a new banner", "generate product images", "make a hero image"
 
 ### Add new element:
 ```json

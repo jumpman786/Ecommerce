@@ -2,8 +2,12 @@
 OpenAI GPT-4o client for the AI agent.
 """
 import os
+import base64
+import io
 from typing import Any, AsyncIterator, Optional
 from openai import AsyncOpenAI
+from PIL import Image
+import httpx
 
 
 class OpenAIClient:
@@ -258,6 +262,107 @@ Be specific about what needs to be fixed."""
         )
 
         return response
+
+    async def edit_image(
+        self,
+        image_source: str,
+        prompt: str,
+        size: str = "512x512"  # Smaller size for faster loading on web
+    ) -> str:
+        """
+        Edit an image using OpenAI DALL-E.
+
+        Args:
+            image_source: Original image - can be base64 data URL or HTTP URL
+            prompt: Description of desired changes
+            size: Output size (default 1024x1024)
+
+        Returns:
+            Edited image as base64 data URL
+        """
+        print(f"🎨 OpenAI edit_image called: prompt={prompt[:50]}...")
+        
+        # Get the raw image bytes
+        image_bytes = await self._fetch_image_bytes(image_source)
+        print(f"🎨 Fetched {len(image_bytes)} bytes from source")
+        
+        # Prepare as square PNG (DALL-E requirement)
+        prepared_image = self._prepare_image_for_edit(image_bytes)
+        print(f"🎨 Prepared image: {len(prepared_image)} bytes")
+        
+        # Create a file-like object with proper name for OpenAI API
+        image_file = io.BytesIO(prepared_image)
+        image_file.name = "image.png"  # OpenAI requires .png extension
+        
+        # Call OpenAI image edit API
+        response = await self.client.images.edit(
+            model="dall-e-2",  # Only dall-e-2 supports edits
+            image=image_file,
+            prompt=prompt,
+            n=1,
+            size=size,
+            response_format="b64_json"
+        )
+        
+        # Extract base64 from response
+        edited_b64 = response.data[0].b64_json
+        print(f"🎨 Edit successful, got {len(edited_b64)} chars of base64")
+        return f"data:image/png;base64,{edited_b64}"
+
+    async def _fetch_image_bytes(self, image_source: str) -> bytes:
+        """Fetch image bytes from URL or decode from base64."""
+        if image_source.startswith("data:"):
+            # Extract base64 from data URL
+            # Format: data:image/png;base64,<data>
+            header, b64_data = image_source.split(",", 1)
+            return base64.b64decode(b64_data)
+        elif image_source.startswith("http://") or image_source.startswith("https://"):
+            # Fetch from URL
+            async with httpx.AsyncClient() as client:
+                response = await client.get(image_source)
+                response.raise_for_status()
+                return response.content
+        else:
+            raise ValueError(f"Unsupported image source: {image_source[:50]}...")
+
+    def _prepare_image_for_edit(self, image_bytes: bytes) -> bytes:
+        """
+        Prepare image for DALL-E edit API.
+        - Convert to PNG
+        - Make it square (center crop or pad)
+        - Ensure under 4MB
+        """
+        img = Image.open(io.BytesIO(image_bytes))
+        
+        # Convert to RGBA (required for transparency support)
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+        
+        # Make square by center-cropping
+        width, height = img.size
+        min_dim = min(width, height)
+        left = (width - min_dim) // 2
+        top = (height - min_dim) // 2
+        img = img.crop((left, top, left + min_dim, top + min_dim))
+        
+        # Resize to 512x512 for faster web rendering
+        if min_dim != 512:
+            img = img.resize((512, 512), Image.LANCZOS)
+        
+        # Convert to PNG bytes
+        output = io.BytesIO()
+        img.save(output, format="PNG")
+        png_bytes = output.getvalue()
+        
+        # Check size - if over 4MB, reduce quality
+        if len(png_bytes) > 4 * 1024 * 1024:
+            # Resize to smaller dimensions
+            img = img.resize((512, 512), Image.LANCZOS)
+            output = io.BytesIO()
+            img.save(output, format="PNG")
+            png_bytes = output.getvalue()
+        
+        return png_bytes
 
     def _summarize_tree(self, tree: dict[str, Any]) -> str:
         """Create a summary of the tree for the planning prompt."""

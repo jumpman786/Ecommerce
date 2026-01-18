@@ -147,10 +147,12 @@ class EcommerceAgent:
                 yield CustomizeEvent(type="status", message=f"Analyzing screenshot (iteration {iteration + 1})...")
                 
                 try:
+                    # Use trimmed messages to avoid token limit
+                    trimmed = self._trim_messages(max_messages=10)
                     analysis_result = await self.openai.analyze_screenshot(
                         base64_image=self.screenshot_data,
                         original_prompt=self.user_prompt,
-                        messages=[{"role": "system", "content": get_system_prompt(catalog_prompt)}] + self.messages,
+                        messages=[{"role": "system", "content": get_system_prompt(catalog_prompt)}] + trimmed,
                         tools=AGENT_TOOLS,
                     )
                     self.screenshot_data = None  # Clear for next iteration
@@ -201,9 +203,9 @@ class EcommerceAgent:
         # Store original prompt for verification context
         self.user_prompt = prompt
         
-        # Pass existing history (from previous requests in this session) for context
+        # Pass trimmed history (from previous requests in this session) for context
         # This allows "move it to left" to understand what "it" refers to
-        existing_history = self.messages.copy() if self.messages else None
+        existing_history = self._trim_messages(max_messages=10) if self.messages else None
         
         response = await self.openai.generate_plan(
             user_prompt=prompt,
@@ -256,15 +258,21 @@ class EcommerceAgent:
         system_prompt: str,
     ) -> dict[str, Any]:
         """Execute a single step using GPT-4o with conversation history."""
-        # Add user message to history
+        # Summarize tree (just keys and types, not full props)
+        tree_summary = self._summarize_tree_for_step()
+        
+        # Add user message to history (keep it short)
         self.messages.append({
             "role": "user",
-            "content": f"Execute this step: {step}\n\nCurrent UI tree:\n{json.dumps(self.tree.model_dump(), indent=2)[:2000]}..."
+            "content": f"Execute: {step}\n\nTree keys: {tree_summary}"
         })
         
-        # Call with full conversation history
+        # Trim history if too long (keep last 20 messages)
+        trimmed_messages = self._trim_messages(max_messages=20)
+        
+        # Call with trimmed conversation history
         response = await self.openai.chat_completion(
-            messages=[{"role": "system", "content": system_prompt}] + self.messages,
+            messages=[{"role": "system", "content": system_prompt}] + trimmed_messages,
             tools=AGENT_TOOLS,
             temperature=0.7,
         )
@@ -282,6 +290,68 @@ class EcommerceAgent:
 
         return response
 
+    def _summarize_tree_for_step(self) -> str:
+        """Create a compact tree summary for step execution."""
+        elements = self.tree.elements
+        # Just list keys grouped by type
+        by_type: dict[str, list[str]] = {}
+        for key, el in elements.items():
+            t = el.type
+            if t not in by_type:
+                by_type[t] = []
+            by_type[t].append(key)
+        
+        lines = []
+        for t, keys in by_type.items():
+            lines.append(f"{t}: {', '.join(keys[:10])}" + (f"... +{len(keys)-10}" if len(keys) > 10 else ""))
+        return "\n".join(lines)
+
+    def _trim_messages(self, max_messages: int = 20) -> list[dict[str, Any]]:
+        """Trim conversation history to avoid token limits.
+        
+        IMPORTANT: Must keep tool call sequences together - an assistant message
+        with tool_calls MUST be followed by all its tool responses.
+        """
+        if len(self.messages) <= max_messages:
+            return self.messages
+        
+        # Find safe trim point - don't cut inside a tool call sequence
+        # Start from the end and find where we can safely cut
+        messages_to_keep = []
+        pending_tool_ids: set[str] = set()
+        
+        for msg in reversed(self.messages):
+            # Add message
+            messages_to_keep.insert(0, msg)
+            
+            # Track tool responses we've seen
+            if msg.get("role") == "tool":
+                pending_tool_ids.add(msg.get("tool_call_id", ""))
+            
+            # When we see an assistant with tool_calls, remove those IDs from pending
+            if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    pending_tool_ids.discard(tc.get("id", ""))
+            
+            # Once we have enough messages AND no pending tool calls, we can stop
+            if len(messages_to_keep) >= max_messages and not pending_tool_ids:
+                break
+        
+        # If we still have messages but no clean break, just return recent ones
+        if len(messages_to_keep) > max_messages * 2:
+            # Too many - just keep the last max_messages, removing any orphaned tool messages
+            messages_to_keep = messages_to_keep[-max_messages:]
+            # Filter out tool messages without a preceding assistant message
+            clean_messages = []
+            for msg in messages_to_keep:
+                if msg.get("role") == "tool":
+                    # Only keep if we have a matching assistant message
+                    continue  # Skip orphaned tool messages
+                clean_messages.append(msg)
+            messages_to_keep = clean_messages
+        
+        return messages_to_keep
+
     async def _process_tool_calls(
         self,
         response: dict[str, Any],
@@ -297,6 +367,7 @@ class EcommerceAgent:
             on_patch=lambda p: self.patches.append(p),
             on_theme_change=lambda t: self._handle_theme_change(t),
             generate_image_fn=self._generate_image,
+            edit_image_fn=self._edit_image,
         )
 
         for call in tool_calls:
@@ -339,13 +410,15 @@ class EcommerceAgent:
 
             try:
                 # Execute the action
+                print(f"🔧 Executing action: {function_name} with params: {str(params)[:200]}")
                 result = await execute_action(function_name, params, ctx)
+                print(f"✅ Action {function_name} completed: {str(result)[:100]}")
                 
-                # Add tool result to conversation history
+                # Add tool result to conversation history (truncate large values)
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
-                    "content": json.dumps(result),
+                    "content": self._truncate_result(result),
                 })
 
                 # Yield patches
@@ -358,15 +431,17 @@ class EcommerceAgent:
                     yield CustomizeEvent(type="theme_update", theme=self.theme)
 
             except Exception as e:
-                # Add error to history
+                error_msg = str(e)
+                print(f"❌ Action {function_name} failed: {error_msg}")
+                # Add error to history - MUST respond to every tool_call_id
                 self.messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
-                    "content": json.dumps({"error": str(e)}),
+                    "content": json.dumps({"error": error_msg}),
                 })
                 yield CustomizeEvent(
                     type="error",
-                    message=f"Action {function_name} failed: {str(e)}",
+                    message=f"Action {function_name} failed: {error_msg}",
                 )
 
     def _handle_theme_change(self, theme: dict[str, Any]):
@@ -382,3 +457,37 @@ class EcommerceAgent:
     ) -> str:
         """Generate an image using Gemini."""
         return await self.gemini.generate_image(prompt, style, width, height)
+
+    async def _edit_image(
+        self,
+        image_source: str,
+        prompt: str,
+    ) -> str:
+        """Edit an existing image using OpenAI DALL-E."""
+        return await self.openai.edit_image(image_source, prompt)
+
+    def _truncate_result(self, result: dict[str, Any], max_len: int = 500) -> str:
+        """Truncate tool result to avoid token explosion from base64 images."""
+        # Deep copy to avoid modifying original
+        import copy
+        truncated = copy.deepcopy(result)
+        
+        # Truncate known large fields
+        for key in ["imageUrl", "editedImageUrl", "updatedProps"]:
+            if key in truncated:
+                val = truncated[key]
+                if isinstance(val, str) and len(val) > 100:
+                    if val.startswith("data:image"):
+                        truncated[key] = "[BASE64_IMAGE_GENERATED]"
+                    else:
+                        truncated[key] = val[:100] + "..."
+                elif isinstance(val, dict):
+                    # Truncate props that contain images
+                    for pk, pv in list(val.items()):
+                        if isinstance(pv, str) and pv.startswith("data:image"):
+                            val[pk] = "[BASE64_IMAGE]"
+        
+        json_str = json.dumps(truncated)
+        if len(json_str) > max_len:
+            return json_str[:max_len] + "...[truncated]"
+        return json_str

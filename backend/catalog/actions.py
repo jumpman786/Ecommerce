@@ -38,6 +38,12 @@ class GenerateImageParams(BaseModel):
     targetProp: str = Field("imageUrl", description="Prop name to set (default: imageUrl)")
 
 
+class EditImageParams(BaseModel):
+    """Parameters for edit_image action - modify existing images."""
+    componentKey: str = Field(..., description="Image component key to edit (e.g., 'product-4-image')")
+    prompt: str = Field(..., description="What to change in the image (e.g., 'change face to smiling woman', 'add sunglasses')")
+
+
 class AddComponentParams(BaseModel):
     """Parameters for add_component action."""
     parentKey: str = Field(..., description="Parent component key")
@@ -227,6 +233,25 @@ ACTION_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
             },
             "required": ["prompt", "targetComponent"],
+        },
+    },
+
+    "edit_image": {
+        "name": "edit_image",
+        "description": "Edit an EXISTING image in a component using AI. Use this when user wants to MODIFY the current image (change face, add item, edit background) - NOT for generating new images from scratch.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "componentKey": {
+                    "type": "string",
+                    "description": "Key of the Image component to edit (e.g., 'product-4-image')",
+                },
+                "prompt": {
+                    "type": "string",
+                    "description": "What to change in the image (e.g., 'change the face to a smiling woman', 'add sunglasses to the person', 'make the background white')",
+                },
+            },
+            "required": ["componentKey", "prompt"],
         },
     },
 

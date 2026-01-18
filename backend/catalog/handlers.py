@@ -21,12 +21,14 @@ class ActionContext:
         on_patch: Optional[Callable[[PatchOperation], None]] = None,
         on_theme_change: Optional[Callable[[dict[str, Any]], None]] = None,
         generate_image_fn: Optional[Callable[[str, str, int, int], str]] = None,
+        edit_image_fn: Optional[Callable[[str, str], str]] = None,
     ):
         self.tree = tree
         self.theme = theme or {}
         self.on_patch = on_patch or (lambda p: None)
         self.on_theme_change = on_theme_change or (lambda t: None)
         self.generate_image_fn = generate_image_fn
+        self.edit_image_fn = edit_image_fn
         self.patches: list[PatchOperation] = []
 
     def emit_patch(self, op: str, path: str, value: Any = None):
@@ -166,6 +168,75 @@ class ActionHandlers:
             "success": True,
             "imageUrl": image_url,
             "appliedTo": target_component,
+        }
+
+    @staticmethod
+    async def edit_image(
+        params: dict[str, Any],
+        ctx: ActionContext
+    ) -> dict[str, Any]:
+        """
+        Edit an existing image in a component using AI.
+        This modifies the current image rather than generating a new one from scratch.
+        """
+        component_key = params["componentKey"]
+        prompt = params["prompt"]
+        
+        print(f"🖼️ edit_image called: component={component_key}, prompt={prompt}")
+
+        # Find the component
+        element = ctx.tree.elements.get(component_key)
+        if not element:
+            raise ValueError(f"Component not found: {component_key}")
+
+        # Get current image source - check common prop names
+        current_source = (
+            element.props.get("source") or 
+            element.props.get("imageUrl") or 
+            element.props.get("uri") or 
+            element.props.get("src")
+        )
+        
+        if not current_source:
+            raise ValueError(f"Component {component_key} has no image source to edit")
+
+        # Handle nested source objects like { uri: "..." }
+        if isinstance(current_source, dict):
+            current_source = current_source.get("uri", "")
+
+        if not current_source:
+            raise ValueError(f"Component {component_key} has no valid image URL")
+
+        if not ctx.edit_image_fn:
+            raise ValueError("Image editing not available")
+
+        print(f"🖼️ Calling edit_image_fn with source: {current_source[:100]}...")
+        
+        # Call the edit image function
+        edited_image = await ctx.edit_image_fn(current_source, prompt)
+        
+        print(f"🖼️ edit_image_fn returned: {edited_image[:100] if edited_image else 'None'}...")
+
+        # Determine which prop to update
+        target_prop = "source"
+        if "imageUrl" in element.props:
+            target_prop = "imageUrl"
+        elif "uri" in element.props:
+            target_prop = "uri"
+        elif "src" in element.props:
+            target_prop = "src"
+
+        # Apply the edited image to the component
+        await ActionHandlers.modify_component(
+            {"componentKey": component_key, "props": {target_prop: edited_image}},
+            ctx
+        )
+
+        return {
+            "success": True,
+            "componentKey": component_key,
+            "editedImageUrl": edited_image[:100] + "..." if len(edited_image) > 100 else edited_image,
+            "prompt": prompt,
         }
 
     @staticmethod
@@ -590,6 +661,7 @@ ACTION_HANDLER_MAP: dict[str, Callable] = {
     "modify_component": ActionHandlers.modify_component,
     "apply_theme": ActionHandlers.apply_theme,
     "generate_image": ActionHandlers.generate_image,
+    "edit_image": ActionHandlers.edit_image,
     "add_component": ActionHandlers.add_component,
     "remove_component": ActionHandlers.remove_component,
     "reorder_components": ActionHandlers.reorder_components,
